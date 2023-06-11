@@ -1,14 +1,21 @@
 grammar Imp;
 
-prog : com EOF ;
+prog : fun EOF ;
+
+fun : (FUN ID LPAR arguments? RPAR LBRACE (com SEMICOLON)? RET exp RBRACE)* global* com     # fundecl
+    ;
+
+global : ID '.' VGLOBAL ASSIGN exp                                                     # assignGlobal
+        ;
 
 com : IF LPAR exp RPAR THEN LBRACE com RBRACE ELSE LBRACE com RBRACE                # if
     | ID ASSIGN exp                                                                 # assign
+    | GLOBAL ID ASSIGN exp                                                          # initGlobal
+
     | SKIPP                                                                         # skip
     | com SEMICOLON com                                                             # seq
     | WHILE LPAR exp RPAR LBRACE com RBRACE                                         # while
     | OUT LPAR exp RPAR                                                             # out
-    | FUN ID LPAR ((ID)(','|){0,})* RPAR LBRACE (com SEMICOLON)? RET exp RBRACE     # fun
     ;
 
 exp : NAT                                 # nat
@@ -22,7 +29,11 @@ exp : NAT                                 # nat
     | exp op=(EQQ | NEQ) exp              # eqExp
     | exp op=(AND | OR) exp               # logicExp
     | ID                                  # id
+    | ID '.' VGLOBAL                      # global
+    | ID LPAR arguments? RPAR             # funcall
     ;
+
+arguments : exp (COMMA exp)* ;
 
 NAT : '0' | [1-9][0-9]* ;
 BOOL : 'true' | 'false' ;
@@ -54,13 +65,17 @@ ASSIGN : '=' ;
 OUT    : 'out' ;
 FUN    : 'fun' ;
 RET    : 'return' ;
+GLOBAL : 'global' ;
+VGLOBAL: 'g' ;
+
 
 LPAR      : '(' ;
 RPAR      : ')';
 LBRACE    : '{' ;
 RBRACE    : '}' ;
 SEMICOLON : ';' ;
+COMMA     : ',' ;
 
-ID : [a-z]+ ;
+ID : [a-zA-Z]+ ;
 
 WS : [ \t\r\n]+ -> skip ;
