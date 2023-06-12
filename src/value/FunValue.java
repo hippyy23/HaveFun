@@ -11,13 +11,21 @@ public class FunValue extends Value {
     private final String funName;
     private RuleContext funBody = null;
     private final RuleContext ret;
-    private final Map<String, Integer> funParams = new HashMap<>();
+    private Map<String, Integer> funParams = new HashMap<>();
     private final List<ExpValue<?>> funValues = new ArrayList<>();
+    private final Map<String, ExpValue<?>> funVars = new HashMap<>();
 
 
     public FunValue(String funName, RuleContext ret) {
         this.funName = funName;
         this.ret = ret;
+    }
+
+    public FunValue(FunValue that) {
+        this.funName = that.getFunName();
+        this.funParams = that.getParams();
+        this.ret = that.getRet();
+        this.funBody = that.getFunBody();
     }
 
     public String getFunName() {
@@ -46,7 +54,20 @@ public class FunValue extends Value {
 
     public int numParams() { return funParams.size(); }
 
+    public Map<String, Integer> getParams() { return funParams; }
+
     private int getIndex(String id) { return funParams.get(id); }
+
+    public void insertFunVar(String id, ExpValue<?> v) { funVars.put(id, v); }
+
+    public ExpValue<?> getFunVar(String id) { return funVars.get(id); }
+
+    public boolean containsFunVar(String id) { return funVars.containsKey(id); }
+
+    public void clear() {
+        this.funValues.clear();
+        this.funVars.clear();
+    }
 
     @Override
     public boolean equals(Object obj) {

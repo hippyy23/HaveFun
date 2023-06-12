@@ -25,7 +25,6 @@ public class IntImp extends ImpBaseVisitor<Value> {
 
     private int visitNatExp(ImpParser.ExpContext ctx) {
         try {
-            System.out.println(ctx.getText());
             return ((NatValue) visitExp(ctx)).toJavaValue();
         } catch (ClassCastException e) {
             System.err.println("Type mismatch exception!");
@@ -73,11 +72,11 @@ public class IntImp extends ImpBaseVisitor<Value> {
         String id;
         ExpValue<?> v;
 
-        if (ctx.getParent() instanceof ImpParser.FundeclContext) {
+        if (conf.getInFun()) {
             id = ctx.ID().getText();
             v = visitExp(ctx.exp());
 
-            conf.insertFunVar(id, v);
+            conf.getActiveFun().insertFunVar(id, v);
         } else {
             id = ctx.ID().getText();
             v = visitExp(ctx.exp());
@@ -91,9 +90,8 @@ public class IntImp extends ImpBaseVisitor<Value> {
     @Override
     public Value visitAssignGlobal(ImpParser.AssignGlobalContext ctx) {
         String id = ctx.ID().getText();
-        ExpValue<?> v;
 
-        if (!conf.globalExists(id)) {
+        if (conf.globalExists(id)) {
             conf.updateGlobal(id, visitExp(ctx.exp()));
         } else {
             System.err.println("Variable " + id + " used but never instantiated");
@@ -161,14 +159,14 @@ public class IntImp extends ImpBaseVisitor<Value> {
                     List<String> arguments = Arrays.asList(strArgs.split("\\s*,\\s*"));
                     for (int index = 0; index < arguments.size(); index++) {
                         formalParam = arguments.get(index);
-                        if (!(v.paramExists(formalParam))) {
-                            v.initParam(arguments.get(index), index);
-                        } else {
+                        if (v.paramExists(formalParam)) {
                             System.err.println("Parameter '" + formalParam +
                                     "' clashes with previous parameters in " + funName);
                             System.err.println("@" + ctx.start.getLine() + ":" + ctx.start.getCharPositionInLine());
 
                             System.exit(1);
+                        } else {
+                            v.initParam(formalParam, index);
                         }
                     }
                 }
@@ -256,13 +254,15 @@ public class IntImp extends ImpBaseVisitor<Value> {
         String id = ctx.ID().getText();
 
         if (conf.getInFun()) {
-            FunValue fun = conf.getFun(conf.getActiveFun());
+            FunValue fun = conf.getActiveFun();
             ExpValue<?> v = null;
 
-            if (conf.containsFunVar(id)) {
-                v = conf.getFunVar(id);
+            if (fun.containsFunVar(id)) {
+                v = fun.getFunVar(id);
             } else if (fun.paramExists(id)) {
                 v = fun.getParam(id);
+            } else if (conf.globalExists(id)) {
+                v = conf.getGlobal(id);
             } else {
                 System.err.println("Variable " + id + " used but never instantiated");
                 System.err.println("@" + ctx.start.getLine() + ":" + ctx.start.getCharPositionInLine());
@@ -273,6 +273,9 @@ public class IntImp extends ImpBaseVisitor<Value> {
             return v;
         } else {
             if (!conf.contains(id)) {
+                if (conf.globalExists(id)) {
+                    return conf.getGlobal(id);
+                }
                 System.err.println("Variable " + id + " used but never instantiated");
                 System.err.println("@" + ctx.start.getLine() + ":" + ctx.start.getCharPositionInLine());
 
@@ -286,16 +289,47 @@ public class IntImp extends ImpBaseVisitor<Value> {
     @Override
     public Value visitFuncall(ImpParser.FuncallContext ctx) {
         String funName = ctx.ID().getText();
-        conf.clearFunVars();
-        conf.activateFun(funName);
 
-        // inserire i parametri passati
+        // se una funzione e' attiva ed ha lo stesso nome
+        // creo un nuovo ambiente per la funzione
+        // il nuovo ambiente si prende l'ambiente della vecchia (prima dell'assegnazione dei parametri)
+        // poi se ha il body lo assegno e chiamo il body (non ha senso una funzione senza body ricorsiva)
+        // diventa la funzione attiva
+        // sistemare la disattivazione delle funzioni
 
         if (conf.containsFun(funName)) {
-            FunValue function = conf.getFun(funName);
+            FunValue function;
+            if (conf.getActiveFun() != null && conf.getActiveFun().getFunName().equals(funName)) {
+                function = new FunValue(conf.getFun(funName));
+            } else {
+                function = conf.getFun(funName);
+            }
+
             ImpParser.ComContext funBody;
             ImpParser.ExpContext ret = (ImpParser.ExpContext) function.getRet();
 
+            if (ctx.arguments() != null) {
+                ExpValue<?> actualParam;
+                if (ctx.arguments().exp().size() == function.numParams()) {
+                    for (int index = 0; index < ctx.arguments().exp().size(); index++) {
+                        actualParam = visitExp(ctx.arguments().exp(index));
+                        function.insertParam(index, actualParam);
+                    }
+                } else {
+                    System.err.println("Function '" + funName + "' called with wrong numbers of arguments.");
+                    System.err.println("expected " + function.numParams() + " given " + ctx.arguments().exp().size());
+                    System.err.println("@" + ctx.start.getLine() + ":" + ctx.start.getCharPositionInLine());
+
+                    System.exit(1);
+                }
+            } else if (ctx.arguments() == null && function.numParams() > 0) {
+                System.err.println("Function '" + funName + "' called with wrong numbers of arguments.");
+                System.err.println("expected " + function.numParams() + " given 0");
+                System.err.println("@" + ctx.start.getLine() + ":" + ctx.start.getCharPositionInLine());
+
+                System.exit(1);
+            }
+            conf.setActivateFun(function);
             if (function.hasBody()) {
                 funBody = (ImpParser.ComContext) function.getFunBody();
                 visitCom(funBody);
@@ -318,7 +352,7 @@ public class IntImp extends ImpBaseVisitor<Value> {
     public Value visitGlobal(ImpParser.GlobalContext ctx) {
         String id = ctx.ID().getText();
 
-        if (!conf.globalExists(id)) {
+        if (conf.globalExists(id)) {
             System.err.println("Variable " + id + " used but never instantiated");
             System.err.println("@" + ctx.start.getLine() + ":" + ctx.start.getCharPositionInLine());
 

@@ -2,16 +2,15 @@ grammar Imp;
 
 prog : fun EOF ;
 
-fun : (FUN ID LPAR arguments? RPAR LBRACE (com SEMICOLON)? RET exp RBRACE)* global* com     # fundecl
+fun : (FUN ID LPAR arguments? RPAR LBRACE (com SEMICOLON)? RET exp RBRACE)* ig* com     # fundecl
     ;
 
-global : ID '.' VGLOBAL ASSIGN exp                                                     # assignGlobal
-        ;
+ig  : GLOBAL ID ASSIGN exp SEMICOLON    # initGlobal
+    ;
 
 com : IF LPAR exp RPAR THEN LBRACE com RBRACE ELSE LBRACE com RBRACE                # if
     | ID ASSIGN exp                                                                 # assign
-    | GLOBAL ID ASSIGN exp                                                          # initGlobal
-
+    | ID VGLOBAL ASSIGN exp                                                         # assignGlobal
     | SKIPP                                                                         # skip
     | com SEMICOLON com                                                             # seq
     | WHILE LPAR exp RPAR LBRACE com RBRACE                                         # while
@@ -29,7 +28,7 @@ exp : NAT                                 # nat
     | exp op=(EQQ | NEQ) exp              # eqExp
     | exp op=(AND | OR) exp               # logicExp
     | ID                                  # id
-    | ID '.' VGLOBAL                      # global
+    | ID VGLOBAL                          # global
     | ID LPAR arguments? RPAR             # funcall
     ;
 
@@ -64,9 +63,9 @@ SKIPP  : 'skip' ;
 ASSIGN : '=' ;
 OUT    : 'out' ;
 FUN    : 'fun' ;
-RET    : 'return' ;
+RET    : 'return ' ;
 GLOBAL : 'global' ;
-VGLOBAL: 'g' ;
+VGLOBAL: '.g' ;
 
 
 LPAR      : '(' ;

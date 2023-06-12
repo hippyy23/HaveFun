@@ -5,12 +5,13 @@ import java.util.*;
 
 public class Conf {
 
-    private String activeFun;
+    private List<FunValue> activeFuns = new ArrayList<>();
     private boolean inFun = false;
+    private final Map<String, Integer> funCalled = new HashMap<>();
     private final Map<String, ExpValue<?>> map = new HashMap<>();
     private final Map<String, ExpValue<?>> globalVars = new HashMap<>();
     private final Map<String, FunValue> funs = new HashMap<>();
-    private final Map<String, ExpValue<?>> funVars = new HashMap<>();
+
 
     public boolean contains(String id) { return map.containsKey(id); }
 
@@ -22,9 +23,6 @@ public class Conf {
 
     public boolean globalExists(String id) { return globalVars.containsKey(id); }
 
-//    // da rifare
-//    public boolean funExists(String fun) { return funParams.containsKey(fun); }
-
     public ExpValue<?> get(String id) {
         return map.get(id);
     }
@@ -33,22 +31,30 @@ public class Conf {
         return globalVars.get(id);
     }
 
-    public void insertFunVar(String id, ExpValue<?> v) { funVars.put(id, v); }
-
-    public ExpValue<?> getFunVar(String id) { return funVars.get(id); }
-
-    public boolean containsFunVar(String id) { return funVars.containsKey(id); }
-
-    public void clearFunVars() { funVars.clear(); }
-
-    public void activateFun(String funName) {
-        this.activeFun = funName;
+    public void setActivateFun(FunValue fun) {
+        this.activeFuns.add(0, fun);
         this.inFun = true;
     }
 
-    public String getActiveFun() { return activeFun; }
+    public FunValue getActiveFun() {
+        if (this.activeFuns.isEmpty()) {
+            return null;
+        }
 
-    public void deactivateFun() { this.inFun = false; }
+        return activeFuns.get(0);
+    }
+
+    public void deactivateFun() {
+        if (this.activeFuns.size() == 1) {
+            this.activeFuns.get(0).clear();
+            this.activeFuns.remove(0);
+            this.inFun = false;
+        } else {
+            this.activeFuns.get(0).clear();
+            this.activeFuns.remove(0);
+        }
+
+    }
 
     public boolean getInFun() { return this.inFun; }
 
