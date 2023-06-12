@@ -5,9 +5,8 @@ import java.util.*;
 
 public class Conf {
 
-    private List<FunValue> activeFuns = new ArrayList<>();
+    private final List<FunValue> activeFuns = new ArrayList<>();
     private boolean inFun = false;
-    private final Map<String, Integer> funCalled = new HashMap<>();
     private final Map<String, ExpValue<?>> map = new HashMap<>();
     private final Map<String, ExpValue<?>> globalVars = new HashMap<>();
     private final Map<String, FunValue> funs = new HashMap<>();
