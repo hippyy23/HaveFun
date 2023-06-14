@@ -10,6 +10,8 @@ public class Conf {
     private final Map<String, ExpValue<?>> map = new HashMap<>();
     private final Map<String, ExpValue<?>> globalVars = new HashMap<>();
     private final Map<String, FunValue> funs = new HashMap<>();
+    private final Map<String, ExpValue<?>> arnoldVars = new HashMap<>();
+    private String topStack = null;
 
 
     public boolean contains(String id) { return map.containsKey(id); }
@@ -21,6 +23,10 @@ public class Conf {
     public FunValue getFun(String fun) { return funs.get(fun); }
 
     public boolean globalExists(String id) { return globalVars.containsKey(id); }
+
+    public void updateGlobal(String id, ExpValue<?> v) {
+        globalVars.put(id, v);
+    }
 
     public ExpValue<?> get(String id) {
         return map.get(id);
@@ -61,8 +67,14 @@ public class Conf {
         map.put(id, v);
     }
 
-    public void updateGlobal(String id, ExpValue<?> v) {
-        globalVars.put(id, v);
-    }
+    public void updateArnold(String id, ExpValue<?> v) { arnoldVars.put(id, v); }
+
+    public ExpValue<?> getArnoldVar(String id) { return arnoldVars.get(id); }
+
+    public boolean arnoldVarExists(String id) { return arnoldVars.containsKey(id); }
+
+    public void setTopStack(String id) { this.topStack = id; }
+
+    public String getTopStack() { return this.topStack; }
 
 }

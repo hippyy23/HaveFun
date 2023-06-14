@@ -2,6 +2,7 @@ import value.*;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.Random;
 
 public class IntImp extends ImpBaseVisitor<Value> {
 
@@ -23,6 +24,12 @@ public class IntImp extends ImpBaseVisitor<Value> {
         return (ExpValue<?>) visit(ctx);
     }
 
+    private ExpValue<?> visitArnoldExp(ImpParser.ArnoldExpContext ctx) { return (ExpValue<?>) visit(ctx); }
+
+    private ComValue visitArnoldCom(ImpParser.ArnoldComContext ctx) { return (ComValue) visit(ctx); }
+
+    private ComValue visitArnoldStmnt(ImpParser.ArnoldStmntContext ctx) { return (ComValue) visit(ctx); }
+
     private int visitNatExp(ImpParser.ExpContext ctx) {
         try {
             return ((NatValue) visitExp(ctx)).toJavaValue();
@@ -37,6 +44,22 @@ public class IntImp extends ImpBaseVisitor<Value> {
         }
 
         return 0; // unreachable code
+    }
+
+    private Float visitArnoldFloatExp(ImpParser.ArnoldExpContext ctx) {
+        try {
+            return ((FloatValue) visitArnoldExp(ctx)).toJavaValue();
+        } catch (ClassCastException e) {
+            System.err.println("Type mismatch exception!");
+            System.err.println("@" + ctx.start.getLine() + ":" + ctx.start.getCharPositionInLine());
+            System.err.println(">>>>>>>>>>>>>>>>>>>>>>>>");
+            System.err.println(ctx.getText());
+            System.err.println("<<<<<<<<<<<<<<<<<<<<<<<<");
+            System.err.println("> Float expression expected.");
+            System.exit(1);
+        }
+
+        return 0f; // unreachable code
     }
 
     private boolean visitBoolExp(ImpParser.ExpContext ctx) {
@@ -61,6 +84,9 @@ public class IntImp extends ImpBaseVisitor<Value> {
     }
 
     @Override
+    public Value visitArnold(ImpParser.ArnoldContext ctx) { return visit(ctx.arnoldProg()); }
+
+    @Override
     public ComValue visitIf(ImpParser.IfContext ctx) {
         return visitBoolExp(ctx.exp())
                 ? visitCom(ctx.com(0))
@@ -68,20 +94,46 @@ public class IntImp extends ImpBaseVisitor<Value> {
     }
 
     @Override
+    public Value visitIfelse(ImpParser.IfelseContext ctx) {
+        return visitArnoldFloatExp(ctx.arnoldExp()) > 0f
+                ? visitArnoldStmnt(ctx.arnoldStmnt(0))
+                : visitArnoldStmnt(ctx.arnoldStmnt(1));
+    }
+
+    @Override
     public ComValue visitAssign(ImpParser.AssignContext ctx) {
-        String id;
-        ExpValue<?> v;
+        String id = ctx.ID().getText();
+        ExpValue<?> v = visitExp(ctx.exp());
 
         if (conf.getInFun()) {
-            id = ctx.ID().getText();
-            v = visitExp(ctx.exp());
-
             conf.getActiveFun().insertFunVar(id, v);
         } else {
-            id = ctx.ID().getText();
-            v = visitExp(ctx.exp());
-
             conf.update(id, v);
+        }
+
+        return ComValue.INSTANCE;
+    }
+
+    @Override
+    public Value visitVardecl(ImpParser.VardeclContext ctx) {
+        String id = ctx.ID().getText();
+        ExpValue<?> v = visitArnoldExp(ctx.arnoldExp());
+
+        conf.updateArnold(id, v);
+
+        return ComValue.INSTANCE;
+    }
+
+    @Override
+    public Value visitVarassign(ImpParser.VarassignContext ctx) {
+        String id = ctx.ID().getText();
+        ExpValue<?> v = visitArnoldExp(ctx.arnoldExp());
+
+        conf.updateArnold(id, v);
+        conf.setTopStack(id);
+
+        for (int i = 0; i < ctx.arnoldStmnt().size(); i++) {
+            visitArnoldStmnt(ctx.arnoldStmnt(i));
         }
 
         return ComValue.INSTANCE;
@@ -94,7 +146,7 @@ public class IntImp extends ImpBaseVisitor<Value> {
         if (conf.globalExists(id)) {
             conf.updateGlobal(id, visitExp(ctx.exp()));
         } else {
-            System.err.println("Variable " + id + " used but never instantiated");
+            System.err.println("Global variable " + id + " used but never instantiated");
             System.err.println("@" + ctx.start.getLine() + ":" + ctx.start.getCharPositionInLine());
             System.exit(1);
         }
@@ -134,14 +186,33 @@ public class IntImp extends ImpBaseVisitor<Value> {
     }
 
     @Override
+    public Value visitAwhile(ImpParser.AwhileContext ctx) {
+        if (visitArnoldFloatExp(ctx.arnoldExp()) == 0f)
+            return ComValue.INSTANCE;
+
+        for (int i = 0; i < ctx.arnoldCom().size(); i++) {
+            visitArnoldCom(ctx.arnoldCom(i));
+        }
+
+        return visitAwhile(ctx);
+    }
+
+    @Override
     public ComValue visitOut(ImpParser.OutContext ctx) {
         System.out.println(visitExp(ctx.exp()));
         return ComValue.INSTANCE;
     }
 
     @Override
+    public Value visitPrint(ImpParser.PrintContext ctx) {
+        System.out.println(visitArnoldExp(ctx.arnoldExp()));
+        return ComValue.INSTANCE;
+    }
+
+    @Override
     public Value visitFundecl(ImpParser.FundeclContext ctx) {
         FunValue v;
+
         for (int i = 0; i < ctx.ID().size(); i++) {
             String funName = ctx.ID(i).getText();
             if (!(conf.containsFun(funName))) {
@@ -171,11 +242,19 @@ public class IntImp extends ImpBaseVisitor<Value> {
                     }
                 }
                 conf.insertFun(funName, v);
+
             } else {
                 System.err.println("Function " + funName + " is already defined");
                 System.err.println("@" + ctx.start.getLine() + ":" + ctx.start.getCharPositionInLine());
 
                 System.exit(1);
+            }
+        }
+
+        // declare global vars
+        if (!(ctx.ig().isEmpty())) {
+            for (int i = 0; i < ctx.ig().size(); i++) {
+                visitInitGlobal((ImpParser.InitGlobalContext) ctx.ig(i));
             }
         }
 
@@ -187,6 +266,11 @@ public class IntImp extends ImpBaseVisitor<Value> {
     @Override
     public NatValue visitNat(ImpParser.NatContext ctx) {
         return new NatValue(Integer.parseInt(ctx.NAT().getText()));
+    }
+
+    @Override
+    public Value visitFloat(ImpParser.FloatContext ctx) {
+        return new FloatValue(Float.parseFloat(ctx.FLOAT().getText()));
     }
 
     @Override
@@ -238,6 +322,50 @@ public class IntImp extends ImpBaseVisitor<Value> {
     }
 
     @Override
+    public Value visitAplus(ImpParser.AplusContext ctx) {
+        float left = (float) conf.getArnoldVar(conf.getTopStack()).toJavaValue();
+        float right = visitArnoldFloatExp(ctx.arnoldExp());
+
+        float result = left + right;
+        conf.updateArnold(conf.getTopStack(), new FloatValue(result));
+
+        return ComValue.INSTANCE;
+    }
+
+    @Override
+    public Value visitAminus(ImpParser.AminusContext ctx) {
+        float left = (float) conf.getArnoldVar(conf.getTopStack()).toJavaValue();
+        float right = visitArnoldFloatExp(ctx.arnoldExp());
+
+        float result = left - right;
+        conf.updateArnold(conf.getTopStack(), new FloatValue(result));
+
+        return ComValue.INSTANCE;
+    }
+
+    @Override
+    public Value visitAmul(ImpParser.AmulContext ctx) {
+        float left = (float) conf.getArnoldVar(conf.getTopStack()).toJavaValue();
+        float right = visitArnoldFloatExp(ctx.arnoldExp());
+
+        float result = left * right;
+        conf.updateArnold(conf.getTopStack(), new FloatValue(result));
+
+        return ComValue.INSTANCE;
+    }
+
+    @Override
+    public Value visitAdiv(ImpParser.AdivContext ctx) {
+        float left = (float) conf.getArnoldVar(conf.getTopStack()).toJavaValue();
+        float right = visitArnoldFloatExp(ctx.arnoldExp());
+
+        float result = left / right;
+        conf.updateArnold(conf.getTopStack(), new FloatValue(result));
+
+        return ComValue.INSTANCE;
+    }
+
+    @Override
     public BoolValue visitEqExp(ImpParser.EqExpContext ctx) {
         ExpValue<?> left = visitExp(ctx.exp(0));
         ExpValue<?> right = visitExp(ctx.exp(1));
@@ -247,6 +375,18 @@ public class IntImp extends ImpBaseVisitor<Value> {
             case ImpParser.NEQ -> new BoolValue(!left.equals(right));
             default -> null; // unreachable code
         };
+    }
+
+    @Override
+    public Value visitNd(ImpParser.NdContext ctx) {
+        Random rng = new Random();
+
+        switch (rng.nextInt(2)) {
+            case 0 -> visitCom(ctx.com(0));
+            case 1 -> visitCom(ctx.com(1));
+        }
+
+        return ComValue.INSTANCE;
     }
 
     @Override
@@ -287,15 +427,32 @@ public class IntImp extends ImpBaseVisitor<Value> {
     }
 
     @Override
+    public Value visitAid(ImpParser.AidContext ctx) {
+        String id = ctx.ID().getText();
+
+        if (!(conf.arnoldVarExists(id))) {
+            System.err.println("Variable " + id + " used but never instantiated");
+            System.err.println("@" + ctx.start.getLine() + ":" + ctx.start.getCharPositionInLine());
+
+            System.exit(1);
+        }
+
+        return conf.getArnoldVar(id);
+    }
+
+    @Override
+    public Value visitMacro1(ImpParser.Macro1Context ctx) {
+        return new FloatValue(0f);
+    }
+
+    @Override
+    public Value visitMacro2(ImpParser.Macro2Context ctx) {
+        return new FloatValue(1f);
+    }
+
+    @Override
     public Value visitFuncall(ImpParser.FuncallContext ctx) {
         String funName = ctx.ID().getText();
-
-        // se una funzione e' attiva ed ha lo stesso nome
-        // creo un nuovo ambiente per la funzione
-        // il nuovo ambiente si prende l'ambiente della vecchia (prima dell'assegnazione dei parametri)
-        // poi se ha il body lo assegno e chiamo il body (non ha senso una funzione senza body ricorsiva)
-        // diventa la funzione attiva
-        // sistemare la disattivazione delle funzioni
 
         if (conf.containsFun(funName)) {
             FunValue function;
@@ -352,8 +509,8 @@ public class IntImp extends ImpBaseVisitor<Value> {
     public Value visitGlobal(ImpParser.GlobalContext ctx) {
         String id = ctx.ID().getText();
 
-        if (conf.globalExists(id)) {
-            System.err.println("Variable " + id + " used but never instantiated");
+        if (!conf.globalExists(id)) {
+            System.err.println("Global variable " + id + " used but never instantiated");
             System.err.println("@" + ctx.start.getLine() + ":" + ctx.start.getCharPositionInLine());
 
             System.exit(1);
@@ -377,6 +534,63 @@ public class IntImp extends ImpBaseVisitor<Value> {
     }
 
     @Override
+    public Value visitAeqq(ImpParser.AeqqContext ctx) {
+        float result = (float) conf.getArnoldVar(conf.getTopStack()).toJavaValue();
+        float right = visitArnoldFloatExp(ctx.arnoldExp());
+
+        if (result == right) {
+            conf.updateArnold(conf.getTopStack(), new FloatValue(1f));
+        } else {
+            conf.updateArnold(conf.getTopStack(), new FloatValue(0f));
+        }
+
+
+        return ComValue.INSTANCE;
+    }
+
+    @Override
+    public Value visitAgt(ImpParser.AgtContext ctx) {
+        float result = (float) conf.getArnoldVar(conf.getTopStack()).toJavaValue();
+        float right = visitArnoldFloatExp(ctx.arnoldExp());
+
+        if (result > right) {
+            conf.updateArnold(conf.getTopStack(), new FloatValue(1f));
+        } else {
+            conf.updateArnold(conf.getTopStack(), new FloatValue(0f));
+        }
+
+        return ComValue.INSTANCE;
+    }
+
+    @Override
+    public Value visitAor(ImpParser.AorContext ctx) {
+        float result = (float) conf.getArnoldVar(conf.getTopStack()).toJavaValue();
+        float right = visitArnoldFloatExp(ctx.arnoldExp());
+
+        if (result > 0f || right > 0f) {
+            conf.updateArnold(conf.getTopStack(), new FloatValue(1f));
+        } else {
+            conf.updateArnold(conf.getTopStack(), new FloatValue(0f));
+        }
+
+        return ComValue.INSTANCE;
+    }
+
+    @Override
+    public Value visitAnd(ImpParser.AndContext ctx) {
+        float result = (float) conf.getArnoldVar(conf.getTopStack()).toJavaValue();
+        float right = visitArnoldFloatExp(ctx.arnoldExp());
+
+        if (result > 0f && right > 0f) {
+            conf.updateArnold(conf.getTopStack(), new FloatValue(1f));
+        } else {
+            conf.updateArnold(conf.getTopStack(), new FloatValue(0f));
+        }
+
+        return ComValue.INSTANCE;
+    }
+
+    @Override
     public BoolValue visitLogicExp(ImpParser.LogicExpContext ctx) {
         boolean left = visitBoolExp(ctx.exp(0));
         boolean right = visitBoolExp(ctx.exp(1));
@@ -387,4 +601,5 @@ public class IntImp extends ImpBaseVisitor<Value> {
             default -> null;
         };
     }
+
 }

@@ -19,6 +19,12 @@ public class Main {
 
         ParseTree tree = parser.prog();
 
+        if (parser.getNumberOfSyntaxErrors() > 0) {
+            System.err.println("Syntax errors found, program terminated.");
+
+            System.exit(1);
+        }
+
         IntImp interpreter = new IntImp(new Conf());
         interpreter.visit(tree);
     }
