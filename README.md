@@ -50,3 +50,7 @@ Possono essere inseriti sia nel corpo delle funzioni, che nel corpo principale d
 
 *Per la semantica consultare:*
 https://github.com/lhartikk/ArnoldC/wiki/ArnoldC
+
+Requisiti:
+- JDK: 17
+- ANTLR: 4.11.0
